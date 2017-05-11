@@ -1,3 +1,7 @@
+# frozen_string_literal: true
+
+require 'benchmark'
+
 OPERATORS = {
   ADD: {
     sym: '+',
@@ -21,18 +25,17 @@ class EquationGenerator
   def initialize(list, target)
     @list = list
     @target = target
-    @min_delta = Float::INFINITY
-    @solutions = []
-    @step_map = {}
   end
 
   def generate_single_solution
+    reset_solutions
     @stop_after_solution = true
     get_target([], @list)
     puts @solutions.first
   end
 
   def generate_all_solutions
+    reset_solutions
     @stop_after_solution = false
     get_target([], @list)
     puts @solutions
@@ -164,9 +167,18 @@ class EquationGenerator
       origin_list: list
     }
   end
+
+  def reset_solutions
+    ### Reset solution variables
+    @min_delta = Float::INFINITY
+    @solutions = []
+    @step_map = {}
+  end
 end
 
 generator = EquationGenerator.new([25, 75, 50, 1, 9, 3], 386)
 
-generator.generate_all_solutions
-# generator.generate_single_solution
+Benchmark.bm do |x|
+  x.report("Single Solution:\n") { generator.generate_single_solution }
+  x.report("All Solutions:\n") { generator.generate_all_solutions }
+end
