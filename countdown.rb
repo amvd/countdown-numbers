@@ -19,16 +19,13 @@ OPERATORS = {
   }
 }.freeze
 
-# $stdout = File.new('console3.out', 'w')
-
-# $stdout.sync = true
-
 class EquationGenerator
   def initialize(list, target)
     @list = list
     @target = target
     @min_delta = Float::INFINITY
     @solutions = []
+    @step_map = {}
   end
 
   def generate_single_solution
@@ -38,10 +35,18 @@ class EquationGenerator
 
   def generate_all_solutions
     get_target(@list, [], false)
-    # puts @solutions
+    puts @solutions
   end
 
   private
+
+  def record_steps(history)
+    result = history.last[:result]
+    history.each do |record|
+      next if @step_map[record[:origin_list]]
+      @step_map[record[:origin_list]] = result
+    end
+  end
 
   def generate_formula(history, result)
     result_map = {}
@@ -54,12 +59,13 @@ class EquationGenerator
     result_map[result]
   end
 
-  def append_history(prev_history, operation, num1, num2, result)
+  def append_history(prev_history, operation, num1, num2, result, list)
     prev_history + [{
       operator: operation[:sym],
       num1: num1,
       num2: num2,
-      result: result
+      result: result,
+      origin_list: list
     }]
   end
 
@@ -86,19 +92,25 @@ class EquationGenerator
   end
 
   def get_target(list, history, stop_after_solution = true)
-    # puts "Operating on list: #{list}"
-    return if list.length < 2 || stop_after_solution && @min_delta.zero?
+    list.sort!
+    return if @step_map[list]
+    if list.length < 2 || stop_after_solution && @min_delta.zero?
+      record_steps(history)
+      return
+    end
     list.each do |num1|
       new_list = remove_from_list(list, num1)
       new_list.each do |num2|
         new_list2 = remove_from_list(new_list, num2)
         OPERATORS.each do |_, op|
           result = call_operator_on(op, num1, num2)
-          # Prevent end of the world
-          break if result.zero?
+          new_history = append_history(history, op, num1, num2, result, list)
 
-          new_history = append_history(history, op, num1, num2, result)
-          break if check_solution(new_history, result)
+          # Prevent end of the world
+          if result.zero? || check_solution(new_history, result)
+            record_steps(new_history)
+            break
+          end
           get_target(new_list2 + [result], new_history, stop_after_solution)
         end
       end
@@ -108,21 +120,8 @@ end
 
 LIST = [25, 75, 50, 1, 9, 3]
 
-# LIST = [50, 2, 7]
-
 generator = EquationGenerator.new(LIST, 386)
 
-generator.generate_single_solution
-# puts Benchmark.measure { generator.generate_all_solutions }
+# generator.generate_single_solution
 
-# Benchmark.bm do |x|
-#   x.report { generator.generate_single_solution }
-#   x.report { generator.generate_single_solution }
-#   x.report { generator.generate_single_solution }
-# end
-
-# Benchmark.bmbm do |x|
-#   x.report { generator.generate_all_solutions }
-#   x.report { generator.generate_all_solutions }
-#   x.report { generator.generate_all_solutions }
-# end
+puts Benchmark.measure { generator.generate_all_solutions }
