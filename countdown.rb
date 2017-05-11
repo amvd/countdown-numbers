@@ -1,5 +1,3 @@
-require 'benchmark'
-
 OPERATORS = {
   ADD: {
     sym: '+',
@@ -29,12 +27,14 @@ class EquationGenerator
   end
 
   def generate_single_solution
-    get_target(@list, [], true)
-    puts @solutions
+    @stop_after_solution = true
+    get_target([], @list)
+    puts @solutions.first
   end
 
   def generate_all_solutions
-    get_target(@list, [], false)
+    @stop_after_solution = false
+    get_target([], @list)
     puts @solutions
   end
 
@@ -59,14 +59,8 @@ class EquationGenerator
     result_map[result]
   end
 
-  def append_history(prev_history, operation, num1, num2, result, list)
-    prev_history + [{
-      operator: operation[:sym],
-      num1: num1,
-      num2: num2,
-      result: result,
-      origin_list: list
-    }]
+  def append_history(prev_history, history_hash)
+    prev_history + [history_hash]
   end
 
   def remove_from_list(list, num)
@@ -74,15 +68,18 @@ class EquationGenerator
   end
 
   def call_operator_on(operation, num1, num2)
-    return 0 if operation[:sym] == '/' && num1 % num2 != 0
     # puts "#{num1} #{operation[:sym]} #{num2}"
+    return 0 if operation[:sym] == '/' && num1 % num2 != 0
     operation[:function].call(num1, num2)
   end
 
+  def solution_found_for_combo?(list)
+    @step_map[list]
+  end
+
   def check_solution(history, result)
-    # puts "result: #{result}"
     current_delta = (result - @target).abs
-    if @min_delta > 0 && current_delta < @min_delta
+    if @min_delta.positive? && current_delta < @min_delta
       @min_delta = current_delta
       @solutions = [generate_formula(history, result)]
     elsif result == @target
@@ -91,37 +88,63 @@ class EquationGenerator
     true if current_delta.zero?
   end
 
-  def get_target(list, history, stop_after_solution = true)
+  def get_target(history, list)
     list.sort!
-    return if @step_map[list]
-    if list.length < 2 || stop_after_solution && @min_delta.zero?
+    return if solution_found_for_combo?(list)
+
+    if list.length < 2 || @stop_after_solution && @min_delta.zero?
       record_steps(history)
       return
     end
-    list.each do |num1|
-      new_list = remove_from_list(list, num1)
-      new_list.each do |num2|
-        new_list2 = remove_from_list(new_list, num2)
-        OPERATORS.each do |_, op|
-          result = call_operator_on(op, num1, num2)
-          new_history = append_history(history, op, num1, num2, result, list)
+    process_first_numbers(history, list)
+  end
 
-          # Prevent end of the world
-          if result.zero? || check_solution(new_history, result)
-            record_steps(new_history)
-            break
-          end
-          get_target(new_list2 + [result], new_history, stop_after_solution)
-        end
-      end
+  def process_first_numbers(history, list)
+    list.each do |num|
+      new_list = remove_from_list(list, num)
+      process_second_numbers(history, new_list, num, list)
+    end
+  end
+
+  def process_second_numbers(history, list, first_num, original_list)
+    list.each do |num|
+      new_list = remove_from_list(list, num)
+      apply_operators(history, first_num, num, new_list, original_list)
+    end
+  end
+
+  def generate_history_hash(operator, num1, num2, result, list)
+    {
+      operator: operator,
+      num1: num1,
+      num2: num2,
+      result: result,
+      origin_list: list
+    }
+  end
+
+  def end_of_calcs?(history, result)
+    return false unless result.zero? || check_solution(history, result)
+    record_steps(history)
+    true
+  end
+
+  def apply_operators(history, num1, num2, list, original_list)
+    OPERATORS.each do |_, op|
+      result = call_operator_on(op, num1, num2)
+      new_history = append_history(
+        history,
+        generate_history_hash(op[:sym], num1, num2, result, original_list)
+      )
+
+      break if end_of_calcs?(new_history, result)
+
+      get_target(new_history, list + [result])
     end
   end
 end
 
-LIST = [25, 75, 50, 1, 9, 3]
+generator = EquationGenerator.new([25, 75, 50, 1, 9, 3], 386)
 
-generator = EquationGenerator.new(LIST, 386)
-
+generator.generate_all_solutions
 # generator.generate_single_solution
-
-puts Benchmark.measure { generator.generate_all_solutions }
